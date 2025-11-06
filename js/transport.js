@@ -14,23 +14,125 @@ const TransportModule = (function() {
   let lastNominatimRequest = 0;
   const NOMINATIM_DELAY = 1000; // 1 second between requests
 
+  // Popular cities database (fallback when API fails)
+  const POPULAR_CITIES = {
+    // South Korea
+    '서울': { name: '서울특별시, 대한민국', lat: 37.5665, lng: 126.9780 },
+    '서울시': { name: '서울특별시, 대한민국', lat: 37.5665, lng: 126.9780 },
+    '부산': { name: '부산광역시, 대한민국', lat: 35.1796, lng: 129.0756 },
+    '인천': { name: '인천광역시, 대한민국', lat: 37.4563, lng: 126.7052 },
+    '대구': { name: '대구광역시, 대한민국', lat: 35.8714, lng: 128.6014 },
+    '대전': { name: '대전광역시, 대한민국', lat: 36.3504, lng: 127.3845 },
+    '광주': { name: '광주광역시, 대한민국', lat: 35.1595, lng: 126.8526 },
+    '울산': { name: '울산광역시, 대한민국', lat: 35.5384, lng: 129.3114 },
+    '제주': { name: '제주특별자치도, 대한민국', lat: 33.4996, lng: 126.5312 },
+    '수원': { name: '수원시, 경기도, 대한민국', lat: 37.2636, lng: 127.0286 },
+    '창원': { name: '창원시, 경상남도, 대한민국', lat: 35.2280, lng: 128.6811 },
+    '고양': { name: '고양시, 경기도, 대한민국', lat: 37.6584, lng: 126.8320 },
+    '용인': { name: '용인시, 경기도, 대한민국', lat: 37.2411, lng: 127.1776 },
+    '성남': { name: '성남시, 경기도, 대한민국', lat: 37.4201, lng: 127.1262 },
+    '청주': { name: '청주시, 충청북도, 대한민국', lat: 36.6424, lng: 127.4890 },
+    '전주': { name: '전주시, 전라북도, 대한민국', lat: 35.8242, lng: 127.1480 },
+    '천안': { name: '천안시, 충청남도, 대한민국', lat: 36.8151, lng: 127.1139 },
+    '안산': { name: '안산시, 경기도, 대한민국', lat: 37.3219, lng: 126.8309 },
+    '안양': { name: '안양시, 경기도, 대한민국', lat: 37.3943, lng: 126.9568 },
+    '포항': { name: '포항시, 경상북도, 대한민국', lat: 36.0190, lng: 129.3435 },
+    '강릉': { name: '강릉시, 강원도, 대한민국', lat: 37.7519, lng: 128.8761 },
+    '경주': { name: '경주시, 경상북도, 대한민국', lat: 35.8562, lng: 129.2247 },
+    '여수': { name: '여수시, 전라남도, 대한민국', lat: 34.7604, lng: 127.6622 },
+    '속초': { name: '속초시, 강원도, 대한민국', lat: 38.2070, lng: 128.5918 },
+
+    // International
+    '도쿄': { name: '도쿄, 일본', lat: 35.6762, lng: 139.6503 },
+    '오사카': { name: '오사카, 일본', lat: 34.6937, lng: 135.5023 },
+    '교토': { name: '교토, 일본', lat: 35.0116, lng: 135.7681 },
+    '후쿠오카': { name: '후쿠오카, 일본', lat: 33.5904, lng: 130.4017 },
+    '베이징': { name: '베이징, 중국', lat: 39.9042, lng: 116.4074 },
+    '상하이': { name: '상하이, 중국', lat: 31.2304, lng: 121.4737 },
+    '홍콩': { name: '홍콩', lat: 22.3193, lng: 114.1694 },
+    '타이베이': { name: '타이베이, 대만', lat: 25.0330, lng: 121.5654 },
+    '방콕': { name: '방콕, 태국', lat: 13.7563, lng: 100.5018 },
+    '싱가포르': { name: '싱가포르', lat: 1.3521, lng: 103.8198 },
+    '파리': { name: '파리, 프랑스', lat: 48.8566, lng: 2.3522 },
+    '런던': { name: '런던, 영국', lat: 51.5074, lng: -0.1278 },
+    '뉴욕': { name: '뉴욕, 미국', lat: 40.7128, lng: -74.0060 },
+    '로스앤젤레스': { name: '로스앤젤레스, 미국', lat: 34.0522, lng: -118.2437 },
+    '시드니': { name: '시드니, 호주', lat: -33.8688, lng: 151.2093 }
+  };
+
   /**
-   * Search address using Nominatim API
+   * Search from popular cities database
+   * @param {string} query - Search query
+   * @returns {Array} - Array of matching cities
+   */
+  function searchPopularCities(query) {
+    if (!query) return [];
+
+    const normalizedQuery = query.toLowerCase().trim();
+    const results = [];
+
+    // Exact match first
+    for (const [key, city] of Object.entries(POPULAR_CITIES)) {
+      if (key.toLowerCase() === normalizedQuery) {
+        results.push({
+          name: city.name,
+          lat: city.lat,
+          lng: city.lng,
+          type: 'city',
+          source: 'popular'
+        });
+      }
+    }
+
+    // Partial match
+    if (results.length === 0) {
+      for (const [key, city] of Object.entries(POPULAR_CITIES)) {
+        if (key.toLowerCase().includes(normalizedQuery) ||
+            city.name.toLowerCase().includes(normalizedQuery)) {
+          results.push({
+            name: city.name,
+            lat: city.lat,
+            lng: city.lng,
+            type: 'city',
+            source: 'popular'
+          });
+        }
+      }
+    }
+
+    return results.slice(0, 5); // Limit to 5 results
+  }
+
+  /**
+   * Search address using Nominatim API with fallback to popular cities
    * @param {string} query - Search query
    * @returns {Promise<Array>} - Array of results
    */
   async function searchAddress(query) {
-    if (!query || query.length < 3) return [];
+    if (!query || query.length < 2) return [];
 
-    // Rate limiting for Nominatim
-    const now = Date.now();
-    const timeSinceLastRequest = now - lastNominatimRequest;
-    if (timeSinceLastRequest < NOMINATIM_DELAY) {
-      await new Promise(resolve => setTimeout(resolve, NOMINATIM_DELAY - timeSinceLastRequest));
+    console.log('🔍 Address search for:', query);
+
+    // First, search in popular cities (instant, no API call)
+    const popularResults = searchPopularCities(query);
+
+    if (popularResults.length > 0) {
+      console.log('✅ Found in popular cities:', popularResults.length);
+      return popularResults;
     }
-    lastNominatimRequest = Date.now();
+
+    // If not found in popular cities, try API (but might fail due to CORS)
+    console.log('⚠️ Not in popular cities, trying API...');
 
     try {
+      // Rate limiting for Nominatim
+      const now = Date.now();
+      const timeSinceLastRequest = now - lastNominatimRequest;
+      if (timeSinceLastRequest < NOMINATIM_DELAY) {
+        await new Promise(resolve => setTimeout(resolve, NOMINATIM_DELAY - timeSinceLastRequest));
+      }
+      lastNominatimRequest = Date.now();
+
       const url = `${NOMINATIM_URL}/search?` + new URLSearchParams({
         q: query,
         format: 'json',
@@ -45,20 +147,28 @@ const TransportModule = (function() {
       });
 
       if (!response.ok) {
-        throw new Error(`Nominatim API error: ${response.status}`);
+        throw new Error(`API error: ${response.status}`);
       }
 
       const data = await response.json();
 
-      return data.map(item => ({
+      const apiResults = data.map(item => ({
         name: item.display_name,
         lat: parseFloat(item.lat),
         lng: parseFloat(item.lon),
         type: item.type,
-        address: item.address
+        address: item.address,
+        source: 'api'
       }));
+
+      console.log('✅ API search successful:', apiResults.length);
+      return apiResults;
+
     } catch (error) {
-      console.error('Address search error:', error);
+      console.warn('❌ API search failed:', error.message);
+      console.log('💡 Returning empty - user can type city name directly');
+
+      // Return empty array - user can type city name and submit directly
       return [];
     }
   }
