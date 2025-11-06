@@ -71,9 +71,13 @@ const TransportModule = (function() {
    * @returns {Promise<Object>} - Route data
    */
   async function getRoute(start, end, profile = 'driving-car') {
-    try {
-      const url = `${ORS_BASE_URL}/v2/directions/${profile}`;
+    const url = `${ORS_BASE_URL}/v2/directions/${profile}`;
 
+    // Create abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+    try {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -85,11 +89,14 @@ const TransportModule = (function() {
           coordinates: [start, end],
           instructions: true,
           elevation: false
-        })
+        }),
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
-        throw new Error(`OpenRouteService API error: ${response.status}`);
+        throw new Error(`API error: ${response.status}`);
       }
 
       const data = await response.json();
@@ -114,7 +121,14 @@ const TransportModule = (function() {
         profile: profile
       };
     } catch (error) {
-      console.error('Route calculation error:', error);
+      clearTimeout(timeoutId);
+
+      if (error.name === 'AbortError') {
+        throw new Error('API timeout');
+      } else if (error.message.includes('Failed to fetch')) {
+        throw new Error('Network error or CORS blocked');
+      }
+
       throw error;
     }
   }
@@ -126,11 +140,14 @@ const TransportModule = (function() {
    * @returns {Promise<Array>} - Array of routes
    */
   async function getMultipleRoutes(start, end) {
-    console.log('getMultipleRoutes called with:', { start, end });
+    console.log('🚀 getMultipleRoutes called');
+    console.log('Start coordinates:', start);
+    console.log('End coordinates:', end);
 
     try {
       // Validate input
       if (!start || !end || start.length !== 2 || end.length !== 2) {
+        console.error('❌ Invalid coordinates:', { start, end });
         throw new Error('Invalid coordinates provided');
       }
 
@@ -141,13 +158,15 @@ const TransportModule = (function() {
         { profile: 'cycling-regular', name: '자전거', icon: 'fa-bicycle', speed: 15 }
       ];
 
-      console.log('Calculating routes for', profiles.length, 'transport modes...');
+      console.log('📍 Calculating routes for', profiles.length, 'transport modes...');
 
       const routePromises = profiles.map(async ({ profile, name, icon, speed }) => {
+        console.log(`\n🔄 [${name}] Starting route calculation...`);
+
         try {
-          console.log(`Trying to get ${name} route via API...`);
+          console.log(`  → Trying API for ${name}...`);
           const route = await getRoute(start, end, profile);
-          console.log(`✓ ${name} route obtained from API`);
+          console.log(`  ✅ ${name} route obtained from API`);
           return {
             ...route,
             name,
@@ -155,32 +174,48 @@ const TransportModule = (function() {
             type: getRouteType(route)
           };
         } catch (error) {
-          console.warn(`✗ API failed for ${name} route:`, error.message);
+          console.warn(`  ⚠️  API failed for ${name}:`, error.message);
+          console.log(`  🔧 Creating fallback route for ${name}...`);
+
           // Fallback: Create estimated route based on straight-line distance
           try {
             const fallbackRoute = createFallbackRoute(start, end, name, icon, profile, speed);
-            console.log(`✓ Using fallback route for ${name}`);
+            console.log(`  ✅ Fallback route created for ${name}`);
             return fallbackRoute;
           } catch (fallbackError) {
-            console.error(`✗ Fallback route creation failed for ${name}:`, fallbackError);
+            console.error(`  ❌ Fallback creation failed for ${name}:`, fallbackError);
+            console.error('  Fallback error details:', fallbackError.stack);
             return null;
           }
         }
       });
 
+      console.log('\n⏳ Waiting for all routes to complete...');
       const routes = await Promise.all(routePromises);
+
+      console.log('\n📊 Route results:');
+      routes.forEach((route, idx) => {
+        if (route) {
+          console.log(`  ✓ ${route.name}: ${route.distance}km, ${route.duration}${route.isFallback ? ' (fallback)' : ''}`);
+        } else {
+          console.log(`  ✗ Route ${idx}: null`);
+        }
+      });
+
       const validRoutes = routes.filter(route => route !== null);
 
-      console.log(`Routes calculated: ${validRoutes.length} out of ${profiles.length}`);
+      console.log(`\n✅ Final: ${validRoutes.length} out of ${profiles.length} routes ready`);
 
       // If no valid routes, throw error
       if (validRoutes.length === 0) {
+        console.error('❌ No valid routes could be created!');
         throw new Error('No routes could be calculated');
       }
 
       return validRoutes;
     } catch (error) {
       console.error('❌ Multiple routes error:', error);
+      console.error('Error stack:', error.stack);
       throw error;
     }
   }
@@ -196,30 +231,61 @@ const TransportModule = (function() {
    * @returns {Object} - Fallback route
    */
   function createFallbackRoute(start, end, name, icon, profile, speed) {
-    try {
-      console.log(`Creating fallback route for ${name}...`);
+    console.log(`    🔧 createFallbackRoute for ${name}`);
+    console.log(`       Start: [${start[0]}, ${start[1]}]`);
+    console.log(`       End: [${end[0]}, ${end[1]}]`);
+    console.log(`       Speed: ${speed} km/h`);
 
+    try {
       // Validate inputs
-      if (!start || !end || start.length !== 2 || end.length !== 2) {
-        throw new Error('Invalid coordinates for fallback route');
+      if (!start || !end) {
+        throw new Error('Start or end is null/undefined');
+      }
+
+      if (!Array.isArray(start) || !Array.isArray(end)) {
+        throw new Error('Coordinates must be arrays');
+      }
+
+      if (start.length !== 2 || end.length !== 2) {
+        throw new Error(`Invalid array length: start=${start.length}, end=${end.length}`);
       }
 
       if (!speed || speed <= 0) {
-        throw new Error('Invalid speed for fallback route');
+        throw new Error(`Invalid speed: ${speed}`);
       }
 
-      // Calculate straight-line distance
-      const distance = calculateDistance(end[1], end[0], start[1], start[0]);
+      // Extract coordinates
+      const startLng = parseFloat(start[0]);
+      const startLat = parseFloat(start[1]);
+      const endLng = parseFloat(end[0]);
+      const endLat = parseFloat(end[1]);
+
+      console.log(`       Parsed coordinates: (${startLat}, ${startLng}) -> (${endLat}, ${endLng})`);
+
+      if (isNaN(startLng) || isNaN(startLat) || isNaN(endLng) || isNaN(endLat)) {
+        throw new Error('Coordinates contain NaN values');
+      }
+
+      // Calculate straight-line distance using Haversine formula
+      console.log(`       Calculating distance...`);
+      const distance = calculateDistance(startLat, startLng, endLat, endLng);
+      console.log(`       Straight-line distance: ${distance.toFixed(2)} km`);
 
       if (isNaN(distance) || distance <= 0) {
-        throw new Error('Invalid distance calculated');
+        throw new Error(`Invalid distance calculated: ${distance}`);
       }
 
       // Estimate actual travel distance (multiply by 1.3 for roads)
       const travelDistance = distance * 1.3;
+      console.log(`       Estimated travel distance: ${travelDistance.toFixed(2)} km`);
 
       // Calculate duration based on speed
       const durationMinutes = Math.round((travelDistance / speed) * 60);
+      console.log(`       Duration: ${durationMinutes} minutes`);
+
+      if (isNaN(durationMinutes) || durationMinutes <= 0) {
+        throw new Error(`Invalid duration calculated: ${durationMinutes}`);
+      }
 
       // Create simple straight-line coordinates
       const coordinates = [start, end];
@@ -241,15 +307,13 @@ const TransportModule = (function() {
         isFallback: true
       };
 
-      console.log(`Fallback route created:`, {
-        name,
-        distance: fallbackRoute.distance,
-        duration: fallbackRoute.duration
-      });
+      console.log(`    ✅ Fallback route created successfully`);
+      console.log(`       ${name}: ${fallbackRoute.distance}km, ${fallbackRoute.duration}`);
 
       return fallbackRoute;
     } catch (error) {
-      console.error('Error creating fallback route:', error);
+      console.error(`    ❌ Error in createFallbackRoute:`, error.message);
+      console.error(`    Stack:`, error.stack);
       throw new Error(`Failed to create fallback route for ${name}: ${error.message}`);
     }
   }
