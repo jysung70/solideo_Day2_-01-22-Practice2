@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="취향 기반 여행 계획 웹 애플리케이션">
+    <title>여행 계획 - Travel Planner</title>
+
+    <!-- Leaflet.js -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/mobile.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="logo">
+                <i class="fas fa-plane-departure"></i>
+                <h1>Travel Planner</h1>
+            </div>
+            <nav class="nav">
+                <button class="nav-toggle" aria-label="Toggle navigation">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <ul class="nav-menu">
+                    <li><a href="#home">홈</a></li>
+                    <li><a href="#plan">계획</a></li>
+                    <li><a href="#history">최근 검색</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Input Section -->
+        <section class="input-section" id="plan">
+            <div class="container">
+                <h2 class="section-title">
+                    <i class="fas fa-map-marked-alt"></i>
+                    여행 계획 세우기
+                </h2>
+
+                <form class="travel-form" id="travelForm">
+                    <div class="form-grid">
+                        <!-- Departure -->
+                        <div class="form-group">
+                            <label for="departure">
+                                <i class="fas fa-location-dot"></i>
+                                출발지
+                            </label>
+                            <div class="autocomplete-wrapper">
+                                <input
+                                    type="text"
+                                    id="departure"
+                                    class="form-control"
+                                    placeholder="출발 주소를 입력하세요"
+                                    required
+                                    autocomplete="off"
+                                >
+                                <ul class="autocomplete-list" id="departureList"></ul>
+                            </div>
+                        </div>
+
+                        <!-- Destination -->
+                        <div class="form-group">
+                            <label for="destination">
+                                <i class="fas fa-map-pin"></i>
+                                도착지
+                            </label>
+                            <div class="autocomplete-wrapper">
+                                <input
+                                    type="text"
+                                    id="destination"
+                                    class="form-control"
+                                    placeholder="도착 주소를 입력하세요"
+                                    required
+                                    autocomplete="off"
+                                >
+                                <ul class="autocomplete-list" id="destinationList"></ul>
+                            </div>
+                        </div>
+
+                        <!-- Date & Time -->
+                        <div class="form-group">
+                            <label for="departureDate">
+                                <i class="fas fa-calendar-days"></i>
+                                출발 날짜
+                            </label>
+                            <input
+                                type="datetime-local"
+                                id="departureDate"
+                                class="form-control"
+                                required
+                            >
+                        </div>
+
+                        <!-- Duration -->
+                        <div class="form-group">
+                            <label for="duration">
+                                <i class="fas fa-clock"></i>
+                                여행 기간 (일)
+                            </label>
+                            <input
+                                type="number"
+                                id="duration"
+                                class="form-control"
+                                min="1"
+                                max="30"
+                                value="3"
+                                required
+                            >
+                        </div>
+                    </div>
+
+                    <!-- Preferences -->
+                    <div class="form-group preferences-group">
+                        <label class="preferences-label">
+                            <i class="fas fa-heart"></i>
+                            여행 취향 선택
+                        </label>
+                        <div class="preferences-grid">
+                            <label class="preference-item">
+                                <input type="checkbox" name="preference" value="nature">
+                                <span class="preference-box">
+                                    <i class="fas fa-tree"></i>
+                                    <span>자연</span>
+                                </span>
+                            </label>
+                            <label class="preference-item">
+                                <input type="checkbox" name="preference" value="culture">
+                                <span class="preference-box">
+                                    <i class="fas fa-landmark"></i>
+                                    <span>문화</span>
+                                </span>
+                            </label>
+                            <label class="preference-item">
+                                <input type="checkbox" name="preference" value="food">
+                                <span class="preference-box">
+                                    <i class="fas fa-utensils"></i>
+                                    <span>음식</span>
+                                </span>
+                            </label>
+                            <label class="preference-item">
+                                <input type="checkbox" name="preference" value="shopping">
+                                <span class="preference-box">
+                                    <i class="fas fa-shopping-bag"></i>
+                                    <span>쇼핑</span>
+                                </span>
+                            </label>
+                            <label class="preference-item">
+                                <input type="checkbox" name="preference" value="history">
+                                <span class="preference-box">
+                                    <i class="fas fa-monument"></i>
+                                    <span>역사</span>
+                                </span>
+                            </label>
+                            <label class="preference-item">
+                                <input type="checkbox" name="preference" value="adventure">
+                                <span class="preference-box">
+                                    <i class="fas fa-mountain"></i>
+                                    <span>모험</span>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-search"></i>
+                            경로 찾기
+                        </button>
+                        <button type="button" class="btn btn-secondary" id="clearBtn">
+                            <i class="fas fa-redo"></i>
+                            초기화
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- Map Section -->
+        <section class="map-section">
+            <div class="container-fluid">
+                <div id="map" class="map-container"></div>
+                <div class="map-controls">
+                    <button class="map-btn" id="currentLocationBtn" title="현재 위치">
+                        <i class="fas fa-location-crosshairs"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Loading Spinner -->
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="spinner">
+                <i class="fas fa-plane"></i>
+                <p>경로를 찾고 있습니다...</p>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <section class="results-section" id="results">
+            <div class="container">
+                <!-- Routes -->
+                <div class="routes-container" id="routesContainer" style="display: none;">
+                    <h2 class="section-title">
+                        <i class="fas fa-route"></i>
+                        추천 경로
+                    </h2>
+                    <div class="routes-grid" id="routesGrid"></div>
+                </div>
+
+                <!-- Cost Analysis -->
+                <div class="cost-container" id="costContainer" style="display: none;">
+                    <h2 class="section-title">
+                        <i class="fas fa-chart-pie"></i>
+                        비용 분석
+                    </h2>
+                    <div class="cost-grid">
+                        <div class="cost-summary" id="costSummary"></div>
+                        <div class="chart-wrapper">
+                            <canvas id="costChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recommended Places -->
+                <div class="places-container" id="placesContainer" style="display: none;">
+                    <h2 class="section-title">
+                        <i class="fas fa-star"></i>
+                        추천 여행지
+                    </h2>
+                    <div class="places-grid" id="placesGrid"></div>
+                </div>
+
+                <!-- Share Section -->
+                <div class="share-container" id="shareContainer" style="display: none;">
+                    <h2 class="section-title">
+                        <i class="fas fa-share-nodes"></i>
+                        여행 계획 공유
+                    </h2>
+                    <div class="share-buttons">
+                        <button class="btn btn-share" id="shareGoogleMapsBtn">
+                            <i class="fas fa-map"></i>
+                            Google Maps로 보기
+                        </button>
+                        <button class="btn btn-share" id="copyLinkBtn">
+                            <i class="fas fa-link"></i>
+                            링크 복사
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Recent Searches -->
+        <section class="history-section" id="history">
+            <div class="container">
+                <h2 class="section-title">
+                    <i class="fas fa-history"></i>
+                    최근 검색
+                </h2>
+                <div class="history-list" id="historyList">
+                    <p class="empty-message">최근 검색 기록이 없습니다.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-info">
+                    <p>&copy; 2025 Travel Planner. All rights reserved.</p>
+                    <p class="api-credits">
+                        Powered by
+                        <a href="https://openstreetmap.org" target="_blank">OpenStreetMap</a>,
+                        <a href="https://openrouteservice.org" target="_blank">OpenRouteService</a>
+                    </p>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com" target="_blank">
+                        <i class="fab fa-github"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Mobile Action Button -->
+    <div class="mobile-action" id="mobileAction">
+        <button class="mobile-action-btn" id="mobileActionBtn">
+            <i class="fas fa-search"></i>
+        </button>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/dayjs.min.js"></script>
+
+    <!-- App Scripts -->
+    <script src="js/map.js"></script>
+    <script src="js/transport.js"></script>
+    <script src="js/recommend.js"></script>
+    <script src="js/cost.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
