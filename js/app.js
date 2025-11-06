@@ -262,6 +262,8 @@ const TravelApp = (function() {
    * Validate form and auto-search if needed
    */
   async function validateForm() {
+    console.log('Validating form...');
+
     // Check departure
     if (!state.departure) {
       const departureValue = elements.departureInput.value.trim();
@@ -272,9 +274,13 @@ const TravelApp = (function() {
         return false;
       }
 
+      console.log('Searching for departure:', departureValue);
+
       // Auto-search for departure
       try {
         const results = await TransportModule.searchAddress(departureValue);
+        console.log('Departure search results:', results.length);
+
         if (results.length > 0) {
           state.departure = {
             lat: results[0].lat,
@@ -282,8 +288,11 @@ const TravelApp = (function() {
             name: results[0].name
           };
           elements.departureInput.value = results[0].name;
+          console.log('✅ Departure set:', state.departure.name);
         } else {
-          alert('출발지를 찾을 수 없습니다. 다른 주소를 입력해주세요.');
+          // Show helpful message
+          const popularCities = '서울, 부산, 인천, 대구, 대전, 광주, 제주';
+          alert(`출발지를 찾을 수 없습니다.\n\n인기 도시: ${popularCities}\n\n위 도시 이름 중 하나를 정확히 입력해주세요.`);
           elements.departureInput.focus();
           return false;
         }
@@ -304,9 +313,13 @@ const TravelApp = (function() {
         return false;
       }
 
+      console.log('Searching for destination:', destinationValue);
+
       // Auto-search for destination
       try {
         const results = await TransportModule.searchAddress(destinationValue);
+        console.log('Destination search results:', results.length);
+
         if (results.length > 0) {
           state.destination = {
             lat: results[0].lat,
@@ -314,8 +327,11 @@ const TravelApp = (function() {
             name: results[0].name
           };
           elements.destinationInput.value = results[0].name;
+          console.log('✅ Destination set:', state.destination.name);
         } else {
-          alert('도착지를 찾을 수 없습니다. 다른 주소를 입력해주세요.');
+          // Show helpful message
+          const popularCities = '서울, 부산, 인천, 대구, 대전, 광주, 제주, 도쿄, 오사카, 파리, 런던, 뉴욕';
+          alert(`도착지를 찾을 수 없습니다.\n\n인기 도시: ${popularCities}\n\n위 도시 이름 중 하나를 정확히 입력해주세요.`);
           elements.destinationInput.focus();
           return false;
         }
@@ -326,6 +342,7 @@ const TravelApp = (function() {
       }
     }
 
+    console.log('✅ Form validation passed');
     return true;
   }
 
