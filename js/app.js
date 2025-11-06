@@ -204,7 +204,17 @@ const TravelApp = (function() {
     } catch (error) {
       console.error('Error processing trip:', error);
       showLoading(false);
-      alert('경로를 찾는 중 오류가 발생했습니다. 다시 시도해주세요.');
+
+      // Show more specific error message
+      let errorMessage = '경로를 찾는 중 오류가 발생했습니다.';
+
+      if (error.message.includes('No routes')) {
+        errorMessage = '두 지점 사이의 경로를 찾을 수 없습니다. 다른 출발지나 도착지를 입력해주세요.';
+      } else if (error.message.includes('Network') || error.message.includes('fetch')) {
+        errorMessage = '네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.';
+      }
+
+      alert(errorMessage + '\n\n상세 오류: ' + error.message);
     }
   }
 
@@ -310,6 +320,14 @@ const TravelApp = (function() {
       throw new Error('No routes found');
     }
 
+    // Check if using fallback routes
+    const hasFallback = state.routes.some(route => route.isFallback);
+    if (hasFallback) {
+      console.log('⚠️ Using estimated routes based on straight-line distance');
+      // Show info message to user (optional, non-intrusive)
+      showInfoMessage('정확한 경로 계산이 불가능하여 예상 경로를 표시합니다.');
+    }
+
     // Set first route as selected
     state.selectedRoute = state.routes[0];
 
@@ -328,6 +346,38 @@ const TravelApp = (function() {
 
     // Draw routes on map
     MapModule.drawMultipleRoutes(state.routes);
+  }
+
+  /**
+   * Show info message to user
+   */
+  function showInfoMessage(message) {
+    // Create and show a temporary info message
+    const infoDiv = document.createElement('div');
+    infoDiv.style.cssText = `
+      position: fixed;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #f59e0b;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      z-index: 10000;
+      font-weight: 500;
+      max-width: 90%;
+      text-align: center;
+    `;
+    infoDiv.innerHTML = `<i class="fas fa-info-circle"></i> ${message}`;
+    document.body.appendChild(infoDiv);
+
+    // Remove after 5 seconds
+    setTimeout(() => {
+      infoDiv.style.opacity = '0';
+      infoDiv.style.transition = 'opacity 0.5s';
+      setTimeout(() => infoDiv.remove(), 500);
+    }, 5000);
   }
 
   /**
