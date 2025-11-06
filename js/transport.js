@@ -129,12 +129,12 @@ const TransportModule = (function() {
     try {
       // Calculate routes for different modes
       const profiles = [
-        { profile: 'driving-car', name: '자동차', icon: 'fa-car' },
-        { profile: 'foot-walking', name: '도보', icon: 'fa-person-walking' },
-        { profile: 'cycling-regular', name: '자전거', icon: 'fa-bicycle' }
+        { profile: 'driving-car', name: '자동차', icon: 'fa-car', speed: 60 },
+        { profile: 'foot-walking', name: '도보', icon: 'fa-person-walking', speed: 5 },
+        { profile: 'cycling-regular', name: '자전거', icon: 'fa-bicycle', speed: 15 }
       ];
 
-      const routePromises = profiles.map(async ({ profile, name, icon }) => {
+      const routePromises = profiles.map(async ({ profile, name, icon, speed }) => {
         try {
           const route = await getRoute(start, end, profile);
           return {
@@ -145,16 +145,67 @@ const TransportModule = (function() {
           };
         } catch (error) {
           console.error(`Error getting ${name} route:`, error);
-          return null;
+          // Fallback: Create estimated route based on straight-line distance
+          const fallbackRoute = createFallbackRoute(start, end, name, icon, profile, speed);
+          console.log(`Using fallback route for ${name}`);
+          return fallbackRoute;
         }
       });
 
       const routes = await Promise.all(routePromises);
-      return routes.filter(route => route !== null);
+      const validRoutes = routes.filter(route => route !== null);
+
+      // If no valid routes, throw error
+      if (validRoutes.length === 0) {
+        throw new Error('No routes could be calculated');
+      }
+
+      return validRoutes;
     } catch (error) {
       console.error('Multiple routes error:', error);
-      return [];
+      throw error;
     }
+  }
+
+  /**
+   * Create fallback route based on straight-line distance
+   * @param {Array} start - [lng, lat]
+   * @param {Array} end - [lng, lat]
+   * @param {string} name - Route name
+   * @param {string} icon - Icon class
+   * @param {string} profile - Profile type
+   * @param {number} speed - Average speed in km/h
+   * @returns {Object} - Fallback route
+   */
+  function createFallbackRoute(start, end, name, icon, profile, speed) {
+    // Calculate straight-line distance
+    const distance = calculateDistance(end[1], end[0], start[1], start[0]);
+
+    // Estimate actual travel distance (multiply by 1.3 for roads)
+    const travelDistance = distance * 1.3;
+
+    // Calculate duration based on speed
+    const durationMinutes = Math.round((travelDistance / speed) * 60);
+
+    // Create simple straight-line coordinates
+    const coordinates = [start, end];
+
+    return {
+      coordinates: coordinates,
+      distance: travelDistance.toFixed(2),
+      duration: formatDuration(durationMinutes * 60),
+      durationMinutes: durationMinutes,
+      instructions: [{
+        instruction: `${name}(으)로 이동`,
+        distance: travelDistance.toFixed(2),
+        duration: durationMinutes
+      }],
+      profile: profile,
+      name: name,
+      icon: icon,
+      type: getRouteType({ distance: travelDistance.toFixed(2), durationMinutes }),
+      isFallback: true
+    };
   }
 
   /**
