@@ -144,13 +144,43 @@ const CostModule = (function() {
    */
   function renderCostChart(costData) {
     const canvas = document.getElementById('costChart');
-    if (!canvas) return;
+    if (!canvas) {
+      console.warn('Chart canvas not found');
+      return;
+    }
+
+    // Check if Chart.js is loaded
+    if (typeof Chart === 'undefined') {
+      console.error('❌ Chart.js is not loaded. Please check CDN link.');
+      console.log('Showing text summary instead of chart');
+
+      // Show text summary instead
+      const chartWrapper = canvas.parentElement;
+      if (chartWrapper) {
+        chartWrapper.innerHTML = `
+          <div style="padding: 2rem; text-align: center;">
+            <p style="color: #6b7280; margin-bottom: 1rem;">차트 라이브러리를 로드할 수 없습니다.</p>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; max-width: 400px; margin: 0 auto;">
+              <div><strong>교통비:</strong> ${formatCurrency(costData.transport)}</div>
+              <div><strong>숙박비:</strong> ${formatCurrency(costData.accommodation)}</div>
+              <div><strong>식비:</strong> ${formatCurrency(costData.food)}</div>
+              <div><strong>활동비:</strong> ${formatCurrency(costData.activities)}</div>
+            </div>
+          </div>
+        `;
+      }
+      return;
+    }
 
     const ctx = canvas.getContext('2d');
 
     // Destroy existing chart
     if (chartInstance) {
-      chartInstance.destroy();
+      try {
+        chartInstance.destroy();
+      } catch (e) {
+        console.warn('Error destroying previous chart:', e);
+      }
     }
 
     // Prepare data
@@ -170,42 +200,64 @@ const CostModule = (function() {
     ];
 
     // Create chart
-    chartInstance = new Chart(ctx, {
-      type: 'doughnut',
-      data: {
-        labels: labels,
-        datasets: [{
-          data: data,
-          backgroundColor: colors,
-          borderWidth: 2,
-          borderColor: '#ffffff'
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        plugins: {
-          legend: {
-            position: 'bottom',
-            labels: {
-              padding: 15,
-              font: {
-                size: 13
+    try {
+      chartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: data,
+            backgroundColor: colors,
+            borderWidth: 2,
+            borderColor: '#ffffff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: {
+                padding: 15,
+                font: {
+                  size: 13
+                }
               }
-            }
-          },
-          tooltip: {
-            callbacks: {
-              label: function(context) {
-                const label = context.label || '';
-                const value = context.parsed || 0;
-                return `${label}: ${formatCurrency(value)} (${costData.breakdown[getCostKey(label)]}%)`;
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const label = context.label || '';
+                  const value = context.parsed || 0;
+                  return `${label}: ${formatCurrency(value)} (${costData.breakdown[getCostKey(label)]}%)`;
+                }
               }
             }
           }
         }
+      });
+      console.log('✅ Chart created successfully');
+    } catch (error) {
+      console.error('❌ Error creating chart:', error);
+      console.log('Showing text summary instead');
+
+      // Show text summary instead
+      const chartWrapper = canvas.parentElement;
+      if (chartWrapper) {
+        chartWrapper.innerHTML = `
+          <div style="padding: 2rem; text-align: center;">
+            <p style="color: #ef4444; margin-bottom: 1rem;">차트 생성 중 오류가 발생했습니다.</p>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; max-width: 400px; margin: 0 auto;">
+              <div><strong>교통비:</strong> ${formatCurrency(costData.transport)}</div>
+              <div><strong>숙박비:</strong> ${formatCurrency(costData.accommodation)}</div>
+              <div><strong>식비:</strong> ${formatCurrency(costData.food)}</div>
+              <div><strong>활동비:</strong> ${formatCurrency(costData.activities)}</div>
+            </div>
+          </div>
+        `;
       }
-    });
+    }
   }
 
   /**
