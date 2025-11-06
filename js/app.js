@@ -164,30 +164,65 @@ const TravelApp = (function() {
   async function handleFormSubmit(e) {
     e.preventDefault();
 
+    console.log('=== Starting trip planning ===');
+
     // Validate form (now async)
+    console.log('Step 1: Validating form...');
     const isValid = await validateForm();
     if (!isValid) {
+      console.log('Form validation failed');
       return;
     }
+    console.log('✓ Form validated');
 
     // Show loading
     showLoading(true);
 
     try {
       // Get form data
+      console.log('Step 2: Getting form data...');
       await getFormData();
+      console.log('✓ Form data retrieved:', {
+        departure: state.departure?.name,
+        destination: state.destination?.name,
+        duration: state.duration,
+        preferences: state.preferences
+      });
 
       // Calculate routes
-      await calculateRoutes();
+      console.log('Step 3: Calculating routes...');
+      try {
+        await calculateRoutes();
+        console.log('✓ Routes calculated:', state.routes.length, 'routes found');
+      } catch (routeError) {
+        console.error('Route calculation failed:', routeError);
+        throw new Error('경로 계산 실패: ' + routeError.message);
+      }
 
       // Search for places
-      await searchPlaces();
+      console.log('Step 4: Searching for places...');
+      try {
+        await searchPlaces();
+        console.log('✓ Places found:', state.places.length);
+      } catch (placesError) {
+        console.warn('Places search failed, continuing without places:', placesError);
+        state.places = []; // Continue without places
+      }
 
       // Calculate costs
-      calculateCosts();
+      console.log('Step 5: Calculating costs...');
+      try {
+        calculateCosts();
+        console.log('✓ Costs calculated');
+      } catch (costError) {
+        console.error('Cost calculation failed:', costError);
+        // Continue even if cost calculation fails
+      }
 
       // Render results
+      console.log('Step 6: Rendering results...');
       renderResults();
+      console.log('✓ Results rendered');
 
       // Save to history
       saveToHistory();
@@ -201,20 +236,25 @@ const TravelApp = (function() {
       // Hide loading
       showLoading(false);
 
+      console.log('=== Trip planning completed successfully ===');
+
     } catch (error) {
-      console.error('Error processing trip:', error);
+      console.error('❌ Error processing trip:', error);
+      console.error('Error stack:', error.stack);
       showLoading(false);
 
       // Show more specific error message
       let errorMessage = '경로를 찾는 중 오류가 발생했습니다.';
 
-      if (error.message.includes('No routes')) {
+      if (error.message.includes('경로 계산 실패')) {
+        errorMessage = '경로를 계산할 수 없습니다. 출발지와 도착지가 너무 멀거나 연결이 불가능합니다.';
+      } else if (error.message.includes('No routes')) {
         errorMessage = '두 지점 사이의 경로를 찾을 수 없습니다. 다른 출발지나 도착지를 입력해주세요.';
       } else if (error.message.includes('Network') || error.message.includes('fetch')) {
         errorMessage = '네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.';
       }
 
-      alert(errorMessage + '\n\n상세 오류: ' + error.message);
+      alert(errorMessage + '\n\n개발자 콘솔(F12)에서 자세한 오류를 확인할 수 있습니다.');
     }
   }
 
@@ -384,52 +424,103 @@ const TravelApp = (function() {
    * Search for places
    */
   async function searchPlaces() {
-    const midLat = (state.departure.lat + state.destination.lat) / 2;
-    const midLng = (state.departure.lng + state.destination.lng) / 2;
+    try {
+      const midLat = (state.departure.lat + state.destination.lat) / 2;
+      const midLng = (state.departure.lng + state.destination.lng) / 2;
 
-    state.places = await RecommendModule.searchPOIs(
-      midLat,
-      midLng,
-      state.preferences,
-      10000 // 10km radius
-    );
+      console.log('Searching POIs near:', { midLat, midLng, preferences: state.preferences });
 
-    // Add place markers to map
-    state.places.forEach(place => {
-      MapModule.addPlaceMarker(
-        place.lat,
-        place.lng,
-        place.name,
-        place.description,
-        () => handlePlaceClick(place)
+      state.places = await RecommendModule.searchPOIs(
+        midLat,
+        midLng,
+        state.preferences,
+        10000 // 10km radius
       );
-    });
+
+      console.log('POIs found:', state.places.length);
+
+      // Add place markers to map
+      if (state.places && state.places.length > 0) {
+        state.places.forEach(place => {
+          try {
+            MapModule.addPlaceMarker(
+              place.lat,
+              place.lng,
+              place.name,
+              place.description,
+              () => handlePlaceClick(place)
+            );
+          } catch (markerError) {
+            console.warn('Failed to add marker for place:', place.name, markerError);
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error searching places:', error);
+      state.places = [];
+      // Don't throw - continue without places
+    }
   }
 
   /**
    * Calculate costs
    */
   function calculateCosts() {
-    state.costs = CostModule.calculateTripCost({
-      route: state.selectedRoute,
-      duration: state.duration,
-      accommodationLevel: 'standard',
-      foodLevel: 'standard',
-      places: state.places
-    });
-
-    // Calculate costs for all routes
-    state.routes = state.routes.map(route => ({
-      ...route,
-      cost: CostModule.calculateTripCost({
-        route,
+    try {
+      console.log('Calculating costs for selected route...');
+      state.costs = CostModule.calculateTripCost({
+        route: state.selectedRoute,
         duration: state.duration,
         accommodationLevel: 'standard',
         foodLevel: 'standard',
-        places: []
-      }).total,
-      durationMinutes: route.durationMinutes || 60
-    }));
+        places: state.places || []
+      });
+
+      console.log('Calculating costs for all routes...');
+      // Calculate costs for all routes
+      state.routes = state.routes.map(route => {
+        try {
+          const costData = CostModule.calculateTripCost({
+            route,
+            duration: state.duration,
+            accommodationLevel: 'standard',
+            foodLevel: 'standard',
+            places: []
+          });
+
+          return {
+            ...route,
+            cost: costData.total,
+            durationMinutes: route.durationMinutes || 60
+          };
+        } catch (routeCostError) {
+          console.error('Error calculating cost for route:', route.name, routeCostError);
+          return {
+            ...route,
+            cost: 0,
+            durationMinutes: route.durationMinutes || 60
+          };
+        }
+      });
+
+      console.log('Costs calculated successfully');
+    } catch (error) {
+      console.error('Error in calculateCosts:', error);
+      // Set default costs
+      state.costs = {
+        transport: 0,
+        accommodation: 0,
+        food: 0,
+        activities: 0,
+        total: 0,
+        breakdown: {
+          transportPercent: 0,
+          accommodationPercent: 0,
+          foodPercent: 0,
+          activitiesPercent: 0
+        }
+      };
+    }
   }
 
   /**

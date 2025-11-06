@@ -126,7 +126,14 @@ const TransportModule = (function() {
    * @returns {Promise<Array>} - Array of routes
    */
   async function getMultipleRoutes(start, end) {
+    console.log('getMultipleRoutes called with:', { start, end });
+
     try {
+      // Validate input
+      if (!start || !end || start.length !== 2 || end.length !== 2) {
+        throw new Error('Invalid coordinates provided');
+      }
+
       // Calculate routes for different modes
       const profiles = [
         { profile: 'driving-car', name: '자동차', icon: 'fa-car', speed: 60 },
@@ -134,9 +141,13 @@ const TransportModule = (function() {
         { profile: 'cycling-regular', name: '자전거', icon: 'fa-bicycle', speed: 15 }
       ];
 
+      console.log('Calculating routes for', profiles.length, 'transport modes...');
+
       const routePromises = profiles.map(async ({ profile, name, icon, speed }) => {
         try {
+          console.log(`Trying to get ${name} route via API...`);
           const route = await getRoute(start, end, profile);
+          console.log(`✓ ${name} route obtained from API`);
           return {
             ...route,
             name,
@@ -144,16 +155,23 @@ const TransportModule = (function() {
             type: getRouteType(route)
           };
         } catch (error) {
-          console.error(`Error getting ${name} route:`, error);
+          console.warn(`✗ API failed for ${name} route:`, error.message);
           // Fallback: Create estimated route based on straight-line distance
-          const fallbackRoute = createFallbackRoute(start, end, name, icon, profile, speed);
-          console.log(`Using fallback route for ${name}`);
-          return fallbackRoute;
+          try {
+            const fallbackRoute = createFallbackRoute(start, end, name, icon, profile, speed);
+            console.log(`✓ Using fallback route for ${name}`);
+            return fallbackRoute;
+          } catch (fallbackError) {
+            console.error(`✗ Fallback route creation failed for ${name}:`, fallbackError);
+            return null;
+          }
         }
       });
 
       const routes = await Promise.all(routePromises);
       const validRoutes = routes.filter(route => route !== null);
+
+      console.log(`Routes calculated: ${validRoutes.length} out of ${profiles.length}`);
 
       // If no valid routes, throw error
       if (validRoutes.length === 0) {
@@ -162,7 +180,7 @@ const TransportModule = (function() {
 
       return validRoutes;
     } catch (error) {
-      console.error('Multiple routes error:', error);
+      console.error('❌ Multiple routes error:', error);
       throw error;
     }
   }
@@ -178,34 +196,62 @@ const TransportModule = (function() {
    * @returns {Object} - Fallback route
    */
   function createFallbackRoute(start, end, name, icon, profile, speed) {
-    // Calculate straight-line distance
-    const distance = calculateDistance(end[1], end[0], start[1], start[0]);
+    try {
+      console.log(`Creating fallback route for ${name}...`);
 
-    // Estimate actual travel distance (multiply by 1.3 for roads)
-    const travelDistance = distance * 1.3;
+      // Validate inputs
+      if (!start || !end || start.length !== 2 || end.length !== 2) {
+        throw new Error('Invalid coordinates for fallback route');
+      }
 
-    // Calculate duration based on speed
-    const durationMinutes = Math.round((travelDistance / speed) * 60);
+      if (!speed || speed <= 0) {
+        throw new Error('Invalid speed for fallback route');
+      }
 
-    // Create simple straight-line coordinates
-    const coordinates = [start, end];
+      // Calculate straight-line distance
+      const distance = calculateDistance(end[1], end[0], start[1], start[0]);
 
-    return {
-      coordinates: coordinates,
-      distance: travelDistance.toFixed(2),
-      duration: formatDuration(durationMinutes * 60),
-      durationMinutes: durationMinutes,
-      instructions: [{
-        instruction: `${name}(으)로 이동`,
+      if (isNaN(distance) || distance <= 0) {
+        throw new Error('Invalid distance calculated');
+      }
+
+      // Estimate actual travel distance (multiply by 1.3 for roads)
+      const travelDistance = distance * 1.3;
+
+      // Calculate duration based on speed
+      const durationMinutes = Math.round((travelDistance / speed) * 60);
+
+      // Create simple straight-line coordinates
+      const coordinates = [start, end];
+
+      const fallbackRoute = {
+        coordinates: coordinates,
         distance: travelDistance.toFixed(2),
-        duration: durationMinutes
-      }],
-      profile: profile,
-      name: name,
-      icon: icon,
-      type: getRouteType({ distance: travelDistance.toFixed(2), durationMinutes }),
-      isFallback: true
-    };
+        duration: formatDuration(durationMinutes * 60),
+        durationMinutes: durationMinutes,
+        instructions: [{
+          instruction: `${name}(으)로 이동`,
+          distance: travelDistance.toFixed(2),
+          duration: durationMinutes
+        }],
+        profile: profile,
+        name: name,
+        icon: icon,
+        type: getRouteType({ distance: travelDistance.toFixed(2), durationMinutes }),
+        isFallback: true
+      };
+
+      console.log(`Fallback route created:`, {
+        name,
+        distance: fallbackRoute.distance,
+        duration: fallbackRoute.duration
+      });
+
+      return fallbackRoute;
+    } catch (error) {
+      console.error('Error creating fallback route:', error);
+      throw new Error(`Failed to create fallback route for ${name}: ${error.message}`);
+    }
   }
 
   /**
