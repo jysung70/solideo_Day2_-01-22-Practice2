@@ -164,8 +164,9 @@ const TravelApp = (function() {
   async function handleFormSubmit(e) {
     e.preventDefault();
 
-    // Validate form
-    if (!validateForm()) {
+    // Validate form (now async)
+    const isValid = await validateForm();
+    if (!isValid) {
       return;
     }
 
@@ -208,19 +209,71 @@ const TravelApp = (function() {
   }
 
   /**
-   * Validate form
+   * Validate form and auto-search if needed
    */
-  function validateForm() {
+  async function validateForm() {
+    // Check departure
     if (!state.departure) {
-      alert('출발지를 선택해주세요.');
-      elements.departureInput.focus();
-      return false;
+      const departureValue = elements.departureInput.value.trim();
+
+      if (!departureValue) {
+        alert('출발지를 입력해주세요.');
+        elements.departureInput.focus();
+        return false;
+      }
+
+      // Auto-search for departure
+      try {
+        const results = await TransportModule.searchAddress(departureValue);
+        if (results.length > 0) {
+          state.departure = {
+            lat: results[0].lat,
+            lng: results[0].lng,
+            name: results[0].name
+          };
+          elements.departureInput.value = results[0].name;
+        } else {
+          alert('출발지를 찾을 수 없습니다. 다른 주소를 입력해주세요.');
+          elements.departureInput.focus();
+          return false;
+        }
+      } catch (error) {
+        console.error('Departure search error:', error);
+        alert('출발지 검색 중 오류가 발생했습니다.');
+        return false;
+      }
     }
 
+    // Check destination
     if (!state.destination) {
-      alert('도착지를 선택해주세요.');
-      elements.destinationInput.focus();
-      return false;
+      const destinationValue = elements.destinationInput.value.trim();
+
+      if (!destinationValue) {
+        alert('도착지를 입력해주세요.');
+        elements.destinationInput.focus();
+        return false;
+      }
+
+      // Auto-search for destination
+      try {
+        const results = await TransportModule.searchAddress(destinationValue);
+        if (results.length > 0) {
+          state.destination = {
+            lat: results[0].lat,
+            lng: results[0].lng,
+            name: results[0].name
+          };
+          elements.destinationInput.value = results[0].name;
+        } else {
+          alert('도착지를 찾을 수 없습니다. 다른 주소를 입력해주세요.');
+          elements.destinationInput.focus();
+          return false;
+        }
+      } catch (error) {
+        console.error('Destination search error:', error);
+        alert('도착지 검색 중 오류가 발생했습니다.');
+        return false;
+      }
     }
 
     return true;
